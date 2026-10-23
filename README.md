@@ -78,7 +78,7 @@ Em GitHub > Settings > Pages, selecione **Deploy from a branch**, branch `main`,
 1. Acesse o site no GitHub Pages.
 2. Entre com usuário `secretaria` e a senha definida no Firebase Authentication.
 3. Na aba Administração, cadastre os setores.
-4. Em Usuários dos setores, selecione o setor, informe um usuário único e uma senha inicial de pelo menos 10 caracteres.
+4. Em Usuários dos setores, selecione o setor, informe um usuário único e uma senha inicial de pelo menos 8 caracteres.
 5. O gestor acessa com seu usuário e senha. A Secretaria pode redefinir a senha ou bloquear a conta.
 
 ## Limitações e cuidados
