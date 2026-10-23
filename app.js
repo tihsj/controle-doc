@@ -1,28 +1,30 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import { getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut,sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import { getFirestore,doc,getDoc,collection,query,where,onSnapshot,runTransaction,addDoc,updateDoc,serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-functions.js';
 import {firebaseConfig} from './firebase-config.js';
 const $=id=>document.getElementById(id), esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const TYPES={'Ofício':'OF','Circular Interna':'CI','Portaria':'PT','Memorando':'MEM'};
-let auth,db,user,profile,records=[],sectors=[],recipients=[],page='dashboard',unsubs=[];
+let auth,db,functions,user,profile,records=[],sectors=[],recipients=[],accounts=[],page='dashboard',unsubs=[];
 function toast(message,error=false){const e=$('toast');e.textContent=message;e.className=error?'error':'';setTimeout(()=>{if(e.textContent===message)e.classList.add('hidden')},5000)}
 function err(e){console.error(e);toast('Operação não concluída: '+(e?.message||e),true)}
 const isAdmin=()=>profile?.role==='admin', own=r=>r.sectorId===profile?.sectorId;
-function cleanup(){unsubs.forEach(f=>f());unsubs=[];records=[];sectors=[];recipients=[]}
+function cleanup(){unsubs.forEach(f=>f());unsubs=[];records=[];sectors=[];recipients=[];accounts=[]}
 if(firebaseConfig.apiKey?.startsWith('COLE_')){$('setupWarning').classList.remove('hidden');$('loginForm').querySelector('button').disabled=true;}else{
- try{const app=initializeApp(firebaseConfig);auth=getAuth(app);db=getFirestore(app);onAuthStateChanged(auth,async u=>{
+ try{const app=initializeApp(firebaseConfig);auth=getAuth(app);db=getFirestore(app);functions=getFunctions(app,'southamerica-east1');onAuthStateChanged(auth,async u=>{
  cleanup();user=u;profile=null;$('appView').classList.add('hidden');$('loginView').classList.remove('hidden');if(!u)return;
  try{const snap=await getDoc(doc(db,'users',u.uid));if(!snap.exists()||!snap.data().active)throw Error('Conta sem perfil ativo. Solicite à Secretaria a vinculação do UID em users.');profile=snap.data();if(profile.role!=='admin'&&(!profile.sectorId))throw Error('Perfil sem setor vinculado.');
- $('identity').textContent=profile.name||u.email;$('identityDetail').textContent=isAdmin()?'Administração / Secretaria':'Setor: '+(profile.sectorName||profile.sectorId);
+ $('identity').textContent=profile.username||profile.name||'Gestor';$('identityDetail').textContent=isAdmin()?'Administração / Secretaria':'Setor: '+(profile.sectorName||profile.sectorId);
  $('loginView').classList.add('hidden');$('appView').classList.remove('hidden');listen();render();
  }catch(e){err(e);await signOut(auth)}})}catch(e){err(e)}
 }
-$('loginForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await signInWithEmailAndPassword(auth,String(f.get('email')).trim(),String(f.get('password')))}catch(e){err(e)}};
+$('loginForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await signInWithEmailAndPassword(auth,String(f.get('username')).trim().toLowerCase()+'@hsj.local',String(f.get('password')))}catch(e){err(e)}};
 $('logoutBtn').onclick=()=>signOut(auth).catch(err);
 function listen(){
  const listenTo=(q,cb)=>unsubs.push(onSnapshot(q,s=>{cb(s.docs.map(d=>({id:d.id,...d.data()})));render()},err));
  listenTo(collection(db,'sectors'),v=>sectors=v);
  listenTo(collection(db,'recipients'),v=>recipients=v);
+ if(isAdmin())listenTo(collection(db,'users'),v=>accounts=v);
  listenTo(isAdmin()?collection(db,'documents'):query(collection(db,'documents'),where('sectorId','==',profile.sectorId)),v=>records=v.sort((a,b)=>(b.createdAtISO||'').localeCompare(a.createdAtISO||'')));
 }
 const pages=[['dashboard','Painel'],['new','Gerar número'],['mine','Meus documentos'],['consult','Consultar'],['reports','Relatórios'],['admin','Administração']];
@@ -38,6 +40,9 @@ function render(){if(!profile)return;
  $('reportTable').innerHTML=table(rs,false);renderAdmin();suggestions(document.querySelector('#newForm [name=scope]').value);
 }
 function renderAdmin(){if(!isAdmin())return;
+ $('userSector').innerHTML='<option value="">Selecione o setor...</option>'+sectors.filter(s=>s.active).map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+'</option>').join('');
+ $('userList').innerHTML=accounts.map(u=>'<div class="rowline between"><span><strong>'+esc(u.username||'—')+'</strong> · '+esc(u.sectorName||u.sectorId||'Secretaria')+' · '+(u.active?'Ativo':'Bloqueado')+'</span><span><button class="secondary" data-user-action="password" data-uid="'+esc(u.id)+'">Nova senha</button> '+(u.role==='admin'?'':'<button class="'+(u.active?'danger':'secondary')+'" data-user-action="toggle" data-uid="'+esc(u.id)+'">'+(u.active?'Bloquear':'Reativar')+'</button>')+'</span></div>').join('')||'<p class="muted">Nenhuma conta cadastrada.</p>';
+
  for(const [list,items,kind] of [['sectorList',sectors,'sector'],['recipientList',recipients,'recipient']]){$(list).innerHTML=items.map(x=>'<div class="rowline between"><span>'+esc(x.name)+' '+statusTag(x.active?'Registrado':'Cancelado')+'</span><span><button class="secondary" data-admin="rename" data-kind="'+kind+'" data-id="'+esc(x.id)+'">Editar</button> <button class="'+(x.active?'danger':'secondary')+'" data-admin="toggle" data-kind="'+kind+'" data-id="'+esc(x.id)+'">'+(x.active?'Desativar':'Reativar')+'</button></span></div>').join('')}
 }
 function suggestions(scope){$('recipientsList').innerHTML=(scope==='Interno'?sectors:recipients).filter(x=>x.active).map(x=>'<option value="'+esc(x.name)+'"></option>').join('')}
@@ -63,7 +68,8 @@ function openRecord(id){const r=records.find(x=>x.id===id);if(!r)return;const ed
 $('closeDialog').onclick=()=>$('dialog').classList.add('hidden');$('dialog').onclick=e=>{if(e.target===$('dialog'))$('dialog').classList.add('hidden')};
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-open],[data-admin]');if(!b)return;if(b.dataset.open)return openRecord(b.dataset.open);if(!isAdmin())return;const kind=b.dataset.kind,coll=kind==='sector'?'sectors':'recipients',arr=kind==='sector'?sectors:recipients,x=arr.find(i=>i.id===b.dataset.id);if(!x)return;try{if(b.dataset.admin==='rename'){const name=prompt('Novo nome:',x.name)?.trim();if(!name)return;if(arr.some(i=>i.id!==x.id&&i.name.toLowerCase()===name.toLowerCase()))throw Error('Nome já cadastrado.');await updateDoc(doc(db,coll,x.id),{name})}else await updateDoc(doc(db,coll,x.id),{active:!x.active});toast('Cadastro atualizado.')}catch(ex){err(ex)}});
 for(const [form,coll,items] of [['sectorForm','sectors',()=>sectors],['recipientForm','recipients',()=>recipients]])$(form).onsubmit=async e=>{e.preventDefault();if(!isAdmin())return;const name=String(new FormData(e.target).get('name')||'').trim();if(!name)return;if(items().some(x=>x.name.toLowerCase()===name.toLowerCase()))return toast('Nome já cadastrado.',true);try{await addDoc(collection(db,coll),{name,active:true});e.target.reset();toast('Cadastro criado.')}catch(ex){err(ex)}};
-$('resetForm').onsubmit=async e=>{e.preventDefault();const email=String(new FormData(e.target).get('email'));try{await sendPasswordResetEmail(auth,email);toast('Se a conta estiver habilitada, a redefinição será enviada ao e-mail.')}catch(ex){err(ex)}};
+$('userForm').onsubmit=async e=>{e.preventDefault();if(!isAdmin())return;const f=new FormData(e.target),username=String(f.get('username')||'').trim().toLowerCase(),password=String(f.get('password')||''),sectorId=String(f.get('sectorId')||'');if(!/^[a-z0-9._-]{3,40}$/.test(username)||password.length<10||!sectorId)return toast('Informe usuário válido, setor e senha de pelo menos 10 caracteres.',true);try{await httpsCallable(functions,'createSectorUser')({username,password,sectorId});e.target.reset();toast('Usuário criado com sucesso.')}catch(ex){err(ex)}};
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-user-action]');if(!b||!isAdmin())return;const uid=b.dataset.uid,u=accounts.find(x=>x.id===uid);if(!u)return;try{if(b.dataset.userAction==='password'){const password=prompt('Nova senha para '+u.username+' (mínimo 10 caracteres):');if(password===null)return;if(password.length<10)return toast('A senha precisa ter pelo menos 10 caracteres.',true);await httpsCallable(functions,'setSectorPassword')({uid,password});toast('Senha redefinida.')}else{if(!confirm((u.active?'Bloquear':'Reativar')+' usuário '+u.username+'?'))return;await httpsCallable(functions,'setSectorUserActive')({uid,active:!u.active});toast('Situação do usuário atualizada.')}}catch(ex){err(ex)}});
 $('printBtn').onclick=()=>{$('printedAt').textContent='Emitido em '+new Date().toLocaleString('pt-BR');window.print()};
 function csvSafe(v){let s=String(v??'');if(/^[\s]*[=+@\-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'}
 $('excelBtn').onclick=()=>{const rows=isAdmin()?records:records.filter(own),data=[['Número','Tipo','Ano','Setor','Destinatário','Assunto','Situação','Responsável'],...rows.map(r=>[r.number,r.type,r.year,r.sectorName,r.recipient,r.subject,r.status,r.actor])],blob=new Blob(['\ufeff'+data.map(row=>row.map(csvSafe).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='relatorio_hsj.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};

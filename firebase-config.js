@@ -1,10 +1,9 @@
-// Substitua pelos valores de Configurações do projeto > Seus aplicativos > SDK da Web.
-// A chave apiKey do Firebase Web não é senha; a proteção depende das regras e do Auth.
+// Configuração pública do aplicativo Web Controle de Documentos HSJ.
 export const firebaseConfig = {
-  apiKey: "COLE_AQUI_API_KEY",
-  authDomain: "COLE_AQUI_AUTH_DOMAIN",
-  projectId: "COLE_AQUI_PROJECT_ID",
-  storageBucket: "COLE_AQUI_STORAGE_BUCKET",
-  messagingSenderId: "COLE_AQUI_MESSAGING_SENDER_ID",
-  appId: "COLE_AQUI_APP_ID"
+  apiKey: "AIzaSyAeqd2TIz2X5X3A0oo2GDS8Fg2p8WCgCPo",
+  authDomain: "controle-doc-5683b.firebaseapp.com",
+  projectId: "controle-doc-5683b",
+  storageBucket: "controle-doc-5683b.firebasestorage.app",
+  messagingSenderId: "638664631248",
+  appId: "1:638664631248:web:3f2b0d9190b93d47380fd5"
 };

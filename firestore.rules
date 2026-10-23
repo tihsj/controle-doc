@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed() { return request.auth != null; }
+    function userDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function active() { return signed() && userDoc().data.active == true; }
+    function admin() { return active() && userDoc().data.role == 'admin'; }
+    function sector() { return userDoc().data.sectorId; }
+    function own(data) { return active() && data.sectorId == sector(); }
+    function prefix(t) { return t == 'Ofício' ? 'OF' : t == 'Circular Interna' ? 'CI' : t == 'Portaria' ? 'PT' : t == 'Memorando' ? 'MEM' : 'INVALID'; }
+    function validDoc(d) {
+      return d.keys().hasAll(['number','type','year','seq','sectorId','sectorName','actor','scope','subject','recipient','notes','status','createdAtISO','createdAt','history'])
+        && d.type in ['Ofício','Circular Interna','Portaria','Memorando']
+        && d.year is string && d.year.matches('20[0-9][0-9]')
+        && d.seq is int && d.seq > 0 && d.seq < 1000000
+        && d.number == prefix(d.type) + '-' + (d.seq < 10 ? '00' : d.seq < 100 ? '0' : '') + string(d.seq) + '/' + d.year
+        && d.scope in ['Interno','Externo']
+        && d.actor is string && d.actor.size() > 0 && d.actor.size() <= 120
+        && d.subject is string && d.subject.size() <= 250
+        && d.recipient is string && d.recipient.size() <= 180
+        && d.notes is string && d.notes.size() <= 1000
+        && d.status in ['Registrado','Incompleto','Cancelado']
+        && (d.status == 'Cancelado' || d.status == (d.subject.size() > 0 && d.recipient.size() > 0 ? 'Registrado' : 'Incompleto'))
+        && d.history is list && d.history.size() > 0
+        && d.history.size() <= 1000;
+    }
+    match /users/{uid} {
+      allow read: if signed() && (request.auth.uid == uid || admin());
+      allow write: if false; // Criar/vincular usuários somente pelo Console/Admin SDK.
+    }
+    match /sectors/{id} {
+      allow read: if active();
+      allow create, update: if admin() && request.resource.data.keys().hasOnly(['name','active'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100 && request.resource.data.active is bool;
+      allow delete: if false;
+    }
+    match /recipients/{id} {
+      allow read: if active();
+      allow create, update: if admin() && request.resource.data.keys().hasOnly(['name','active'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 180 && request.resource.data.active is bool;
+      allow delete: if false;
+    }
+    match /counters/{id} {
+      allow read: if active();
+      allow create: if active() && request.resource.data.keys().hasOnly(['last','type','year','updatedAt'])
+        && request.resource.data.last == 1
+        && id == prefix(request.resource.data.type) + '_' + request.resource.data.year
+        && existsAfter(/databases/$(database)/documents/documents/$(id + '_000001'));
+      allow update: if active() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last','updatedAt'])
+        && request.resource.data.last == resource.data.last + 1
+        && existsAfter(/databases/$(database)/documents/documents/$(id + '_' + (request.resource.data.last < 10 ? '00000' : request.resource.data.last < 100 ? '0000' : request.resource.data.last < 1000 ? '000' : request.resource.data.last < 10000 ? '00' : request.resource.data.last < 100000 ? '0' : '') + string(request.resource.data.last)));
+      allow delete: if false;
+    }
+    match /documents/{id} {
+      allow read: if admin() || own(resource.data);
+      allow create: if active() && validDoc(request.resource.data)
+        && own(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && id == prefix(request.resource.data.type) + '_' + request.resource.data.year + '_' + (request.resource.data.seq < 10 ? '00000' : request.resource.data.seq < 100 ? '0000' : request.resource.data.seq < 1000 ? '000' : request.resource.data.seq < 10000 ? '00' : request.resource.data.seq < 100000 ? '0' : '') + string(request.resource.data.seq)
+        && getAfter(/databases/$(database)/documents/counters/$(prefix(request.resource.data.type) + '_' + request.resource.data.year)).data.last == request.resource.data.seq;
+      allow update: if own(resource.data) && validDoc(request.resource.data)
+        && resource.data.status != 'Cancelado'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['scope','recipient','subject','notes','status','actor','history'])
+        && request.resource.data.history.size() == resource.data.history.size() + 1
+        && request.resource.data.history[resource.data.history.size()].actor == request.resource.data.actor
+        && request.resource.data.history[resource.data.history.size()].sectorId == sector();
+      allow delete: if false;
+    }
+  }
+}
