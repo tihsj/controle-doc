@@ -1,9 +1,7 @@
-// Importações dos SDKs do Firebase (Firestore e App)
-import { initializeApp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
-// Configuração obtida do seu painel do Firebase
-const firebaseConfig = {
+export const firebaseConfig = {
     apiKey: "AIzaSyC8CVZ0YhDE7iJxD4-Os2ScyRcPNgJ4tUc",
     authDomain: "controle-doc-911fc.firebaseapp.com",
     projectId: "controle-doc-911fc",
@@ -13,6 +11,5 @@ const firebaseConfig = {
     measurementId: "G-2B06P2BXZL"
 };
 
-// Inicializa o Firebase e exporta a instância do Firestore (db)
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
