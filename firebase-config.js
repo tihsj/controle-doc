@@ -1,9 +1,18 @@
-// Configuração pública do aplicativo Web Controle de Documentos HSJ.
-export const firebaseConfig = {
-  apiKey: "AIzaSyAeqd2TIz2X5X3A0oo2GDS8Fg2p8WCgCPo",
-  authDomain: "controle-doc-5683b.firebaseapp.com",
-  projectId: "controle-doc-5683b",
-  storageBucket: "controle-doc-5683b.firebasestorage.app",
-  messagingSenderId: "638664631248",
-  appId: "1:638664631248:web:3f2b0d9190b93d47380fd5"
+// Importações dos SDKs do Firebase (Firestore e App)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js";
+
+// Configuração obtida do seu painel do Firebase
+const firebaseConfig = {
+    apiKey: "AIzaSyC8CVZ0YhDE7iJxD4-Os2ScyRcPNgJ4tUc",
+    authDomain: "controle-doc-911fc.firebaseapp.com",
+    projectId: "controle-doc-911fc",
+    storageBucket: "controle-doc-911fc.firebasestorage.app",
+    messagingSenderId: "485010489036",
+    appId: "1:485010489036:web:3e56eff4d94b57009e8c69",
+    measurementId: "G-2B06P2BXZL"
 };
+
+// Inicializa o Firebase e exporta a instância do Firestore (db)
+const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app);
